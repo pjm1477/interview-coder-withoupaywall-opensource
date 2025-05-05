@@ -236,7 +236,10 @@ const electronAPI = {
       ipcRenderer.removeListener("delete-last-screenshot", subscription)
     }
   },
-  deleteLastScreenshot: () => ipcRenderer.invoke("delete-last-screenshot")
+  deleteLastScreenshot: () => ipcRenderer.invoke("delete-last-screenshot"),
+  
+  // Chrome monitoring functionality
+  monitorChromeSession: () => ipcRenderer.invoke("monitor-chrome-session"),
 }
 
 // Before exposing the API

@@ -4,6 +4,7 @@ import { ipcMain, shell, dialog } from "electron"
 import { randomBytes } from "crypto"
 import { IIpcHandlerDeps } from "./main"
 import { configHelper } from "./ConfigHelper"
+import { getNativeModule } from "../src/lib/nativeModules"
 
 export function initializeIpcHandlers(deps: IIpcHandlerDeps): void {
   console.log("Initializing IPC handlers")
@@ -348,4 +349,55 @@ export function initializeIpcHandlers(deps: IIpcHandlerDeps): void {
       return { success: false, error: "Failed to delete last screenshot" }
     }
   })
+
+  // Handle Chrome session monitoring
+  ipcMain.handle("monitor-chrome-session", async () => {
+    try {
+      const chromeMonitor = getNativeModule('chromeMonitor');
+      if (!chromeMonitor || !chromeMonitor.mpfComMonitorChromeSessionOnce) {
+        console.error("Chrome monitor module not available");
+        return { 
+          success: false, 
+          error: "Chrome monitoring functionality not available" 
+        };
+      }
+
+      // Call the native function
+      const result = chromeMonitor.mpfComMonitorChromeSessionOnce();
+      console.log(`Chrome session monitoring result: ${result}`);
+
+      // The native function returns various status codes
+      // 0 = Success with content captured
+      // 1 = Success but no Chrome windows found
+      // 2 = Some error occurred
+      
+      if (result === 0) {
+        // For now, we're just returning success. In a real implementation,
+        // you would need to extend the native module to return the captured content.
+        return { 
+          success: true, 
+          result,
+          capturedContent: "Content captured successfully. This is a placeholder - the actual content would be returned by an extended native module." 
+        };
+      } else if (result === 1) {
+        return { 
+          success: true, 
+          result,
+          error: "No Chrome windows were found" 
+        };
+      } else {
+        return { 
+          success: false, 
+          result,
+          error: "Error monitoring Chrome session" 
+        };
+      }
+    } catch (error: any) {
+      console.error("Error in monitor-chrome-session handler:", error);
+      return { 
+        success: false, 
+        error: error.message || "Unknown error monitoring Chrome session" 
+      };
+    }
+  });
 }

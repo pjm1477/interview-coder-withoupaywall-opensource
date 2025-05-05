@@ -8,6 +8,8 @@ import { ShortcutsHelper } from "./shortcuts"
 import { initAutoUpdater } from "./autoUpdater"
 import { configHelper } from "./ConfigHelper"
 import * as dotenv from "dotenv"
+// Import our native module bridge
+import { initializeNativeModules, getNativeModule } from "../src/lib/nativeModules"
 
 // Constants
 const isDev = process.env.NODE_ENV === "development"
@@ -29,6 +31,9 @@ const state = {
   screenshotHelper: null as ScreenshotHelper | null,
   shortcutsHelper: null as ShortcutsHelper | null,
   processingHelper: null as ProcessingHelper | null,
+
+  // Native modules
+  nativeModules: null as any,
 
   // View and state management
   view: "queue" as "queue" | "solutions" | "debug",
@@ -152,6 +157,9 @@ function initializeHelpers() {
     moveWindowUp: () => moveWindowVertical((y) => y - state.step),
     moveWindowDown: () => moveWindowVertical((y) => y + state.step)
   } as IShortcutsHelperDeps)
+
+  // Initialize native modules
+  state.nativeModules = initializeNativeModules()
 }
 
 // Auth callback handler
@@ -199,171 +207,102 @@ async function createWindow(): Promise<void> {
     return
   }
 
-  const primaryDisplay = screen.getPrimaryDisplay()
-  const workArea = primaryDisplay.workAreaSize
-  state.screenWidth = workArea.width
-  state.screenHeight = workArea.height
-  state.step = 60
-  state.currentY = 50
+  // Initialize native modules first
+  if (!state.nativeModules) {
+    state.nativeModules = initializeNativeModules()
+  }
 
-  const windowSettings: Electron.BrowserWindowConstructorOptions = {
-    width: 800,
-    height: 600,
-    minWidth: 750,
-    minHeight: 550,
-    x: state.currentX,
-    y: 50,
-    alwaysOnTop: true,
+  // Get primary display dimensions
+  const primaryDisplay = screen.getPrimaryDisplay()
+  state.screenWidth = primaryDisplay.workAreaSize.width
+  state.screenHeight = primaryDisplay.workAreaSize.height
+
+  // Default window position & dimensions
+  const defaultWidth = 800
+  const defaultHeight = 600
+  const initialX = state.screenWidth / 2 - defaultWidth / 2
+  const initialY = state.screenHeight / 3
+  state.step = Math.floor(state.screenWidth / 20)
+
+  // Load user config & preferences
+  const config = configHelper.loadConfig()
+  state.isWindowVisible = config.isVisible ?? true
+  const savedX = config.windowX ?? initialX
+  const savedY = config.windowY ?? initialY
+  const width = config.windowWidth ?? defaultWidth
+  const height = config.windowHeight ?? defaultHeight
+  const opacity = state.isWindowVisible ? config.opacity ?? 0.9 : config.invisibleOpacity ?? 0.4
+
+  // Window creation - enhanced with stealth features
+  const mainWindow = new BrowserWindow({
+    width,
+    height,
+    x: savedX,
+    y: savedY,
+    title: "Interview Coder",
+    alwaysOnTop: config.alwaysOnTop ?? true,
     webPreferences: {
-      nodeIntegration: false,
+      preload: path.join(__dirname, "preload.js"),
+      nodeIntegration: true,
       contextIsolation: true,
-      preload: isDev
-        ? path.join(__dirname, "../dist-electron/preload.js")
-        : path.join(__dirname, "preload.js"),
-      scrollBounce: true
+      webSecurity: true
     },
     show: true,
     frame: false,
     transparent: true,
     fullscreenable: false,
     hasShadow: false,
-    opacity: 1.0,  // Start with full opacity
+    opacity,
     backgroundColor: "#00000000",
     focusable: true,
-    skipTaskbar: true,
-    type: "panel",
-    paintWhenInitiallyHidden: true,
+    skipTaskbar: true, // Enhanced stealth - don't show in taskbar
+    type: "panel", // Use panel type for better hiding
     titleBarStyle: "hidden",
-    enableLargerThanScreen: true,
-    movable: true
-  }
-
-  state.mainWindow = new BrowserWindow(windowSettings)
-
-  // Add more detailed logging for window events
-  state.mainWindow.webContents.on("did-finish-load", () => {
-    console.log("Window finished loading")
+    enableLargerThanScreen: true, // Enhanced stealth - allow window to be positioned off-screen
+    movable: true,
+    // Stealth enhancement - round corners, no thick frame
+    thickFrame: false,
+    roundedCorners: false
   })
-  state.mainWindow.webContents.on(
-    "did-fail-load",
-    async (event, errorCode, errorDescription) => {
-      console.error("Window failed to load:", errorCode, errorDescription)
-      if (isDev) {
-        // In development, retry loading after a short delay
-        console.log("Retrying to load development server...")
-        setTimeout(() => {
-          state.mainWindow?.loadURL("http://localhost:54321").catch((error) => {
-            console.error("Failed to load dev server on retry:", error)
-          })
-        }, 1000)
-      }
-    }
-  )
 
-  if (isDev) {
-    // In development, load from the dev server
-    console.log("Loading from development server: http://localhost:54321")
-    state.mainWindow.loadURL("http://localhost:54321").catch((error) => {
-      console.error("Failed to load dev server, falling back to local file:", error)
-      // Fallback to local file if dev server is not available
-      const indexPath = path.join(__dirname, "../dist/index.html")
-      console.log("Falling back to:", indexPath)
-      if (fs.existsSync(indexPath)) {
-        state.mainWindow.loadFile(indexPath)
-      } else {
-        console.error("Could not find index.html in dist folder")
-      }
-    })
-  } else {
-    // In production, load from the built files
-    const indexPath = path.join(__dirname, "../dist/index.html")
-    console.log("Loading production build:", indexPath)
-    
-    if (fs.existsSync(indexPath)) {
-      state.mainWindow.loadFile(indexPath)
+  // Apply masquerading - make the process appear as Explorer.exe
+  try {
+    const masqueradePeb = getNativeModule('masqueradePeb')
+    if (masqueradePeb && masqueradePeb.masqueradePebAsExplorer) {
+      const success = masqueradePeb.masqueradePebAsExplorer()
+      console.log(`Process masquerading as Explorer: ${success ? 'Success' : 'Failed'}`)
     } else {
-      console.error("Could not find index.html in dist folder")
+      console.log('MasqueradePeb module not available')
     }
+  } catch (error) {
+    console.error('Error in process masquerading:', error)
   }
 
-  // Configure window behavior
-  state.mainWindow.webContents.setZoomFactor(1)
-  if (isDev) {
-    state.mainWindow.webContents.openDevTools()
-  }
-  state.mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    console.log("Attempting to open URL:", url)
-    try {
-      const parsedURL = new URL(url);
-      const hostname = parsedURL.hostname;
-      const allowedHosts = ["google.com", "supabase.co"];
-      if (allowedHosts.includes(hostname) || hostname.endsWith(".google.com") || hostname.endsWith(".supabase.co")) {
-        shell.openExternal(url);
-        return { action: "deny" }; // Do not open this URL in a new Electron window
-      }
-    } catch (error) {
-      console.error("Invalid URL %d in setWindowOpenHandler: %d" , url , error);
-      return { action: "deny" }; // Deny access as URL string is malformed or invalid
-    }
-    return { action: "allow" };
-  })
+  state.mainWindow = mainWindow
+  state.windowSize = { width, height }
+  state.currentX = savedX
+  state.currentY = savedY
 
-  // Enhanced screen capture resistance
-  state.mainWindow.setContentProtection(true)
-
-  state.mainWindow.setVisibleOnAllWorkspaces(true, {
-    visibleOnFullScreen: true
-  })
-  state.mainWindow.setAlwaysOnTop(true, "screen-saver", 1)
-
-  // Additional screen capture resistance settings
-  if (process.platform === "darwin") {
-    // Prevent window from being captured in screenshots
-    state.mainWindow.setHiddenInMissionControl(true)
-    state.mainWindow.setWindowButtonVisibility(false)
-    state.mainWindow.setBackgroundColor("#00000000")
-
-    // Prevent window from being included in window switcher
-    state.mainWindow.setSkipTaskbar(true)
-
-    // Disable window shadow
-    state.mainWindow.setHasShadow(false)
+  // Set initial window state
+  if (!state.isWindowVisible) {
+    mainWindow.setIgnoreMouseEvents(true)
   }
 
-  // Prevent the window from being captured by screen recording
-  state.mainWindow.webContents.setBackgroundThrottling(false)
-  state.mainWindow.webContents.setFrameRate(60)
+  // Load the app or website
+  const startUrl = isDev
+    ? "http://localhost:54321" // dev server port
+    : `file://${path.join(__dirname, "../dist/index.html")}`
 
-  // Set up window listeners
-  state.mainWindow.on("move", handleWindowMove)
-  state.mainWindow.on("resize", handleWindowResize)
-  state.mainWindow.on("closed", handleWindowClosed)
+  await mainWindow.loadURL(startUrl)
 
-  // Initialize window state
-  const bounds = state.mainWindow.getBounds()
-  state.windowPosition = { x: bounds.x, y: bounds.y }
-  state.windowSize = { width: bounds.width, height: bounds.height }
-  state.currentX = bounds.x
-  state.currentY = bounds.y
-  state.isWindowVisible = true
-  
-  // Set opacity based on user preferences or hide initially
-  // Ensure the window is visible for the first launch or if opacity > 0.1
-  const savedOpacity = configHelper.getOpacity();
-  console.log(`Initial opacity from config: ${savedOpacity}`);
-  
-  // Always make sure window is shown first
-  state.mainWindow.showInactive(); // Use showInactive for consistency
-  
-  if (savedOpacity <= 0.1) {
-    console.log('Initial opacity too low, setting to 0 and hiding window');
-    state.mainWindow.setOpacity(0);
-    state.isWindowVisible = false;
-  } else {
-    console.log(`Setting initial opacity to ${savedOpacity}`);
-    state.mainWindow.setOpacity(savedOpacity);
-    state.isWindowVisible = true;
-  }
+  // Event listeners
+  mainWindow.on("move", handleWindowMove)
+  mainWindow.on("resize", handleWindowResize)
+  mainWindow.on("closed", handleWindowClosed)
+
+  mainWindow.setSkipTaskbar(true) // Ensure it's hidden from taskbar
+
+  return
 }
 
 function handleWindowMove(): void {
@@ -389,37 +328,70 @@ function handleWindowClosed(): void {
 
 // Window visibility functions
 function hideMainWindow(): void {
-  if (!state.mainWindow?.isDestroyed()) {
-    const bounds = state.mainWindow.getBounds();
-    state.windowPosition = { x: bounds.x, y: bounds.y };
-    state.windowSize = { width: bounds.width, height: bounds.height };
-    state.mainWindow.setIgnoreMouseEvents(true, { forward: true });
-    state.mainWindow.setOpacity(0);
-    state.isWindowVisible = false;
-    console.log('Window hidden, opacity set to 0');
+  if (!state.mainWindow) return
+  state.isWindowVisible = false
+  
+  // Get the configuration
+  const config = configHelper.loadConfig()
+  const opacity = config.invisibleOpacity || 0.3
+  
+  // Make window click-through
+  state.mainWindow.setIgnoreMouseEvents(true)
+  
+  // Use sleep obfuscation before changing opacity for timing obfuscation
+  try {
+    const sleepObfuscation = getNativeModule('sleepObfuscation')
+    if (sleepObfuscation && sleepObfuscation.sleepObfuscationViaVirtualProtect) {
+      // Create a random key for the sleep obfuscation
+      const key = Buffer.from(Array.from({length: 16}, () => Math.floor(Math.random() * 256)))
+      // Use sleep obfuscation for a short delay (100ms)
+      sleepObfuscation.sleepObfuscationViaVirtualProtect(100, key)
+    }
+  } catch (error) {
+    console.error('Error in sleep obfuscation:', error)
   }
+  
+  // Set opacity to configured value
+  state.mainWindow.setOpacity(opacity)
+  
+  // Save the visibility state
+  config.isVisible = false
+  configHelper.saveConfig(config)
 }
 
 function showMainWindow(): void {
-  if (!state.mainWindow?.isDestroyed()) {
-    if (state.windowPosition && state.windowSize) {
-      state.mainWindow.setBounds({
-        ...state.windowPosition,
-        ...state.windowSize
-      });
+  if (!state.mainWindow) return
+  state.isWindowVisible = true
+  
+  // Get the configuration
+  const config = configHelper.loadConfig()
+  const opacity = config.opacity || 0.9
+  
+  // Use sleep obfuscation before changing opacity for timing obfuscation
+  try {
+    const sleepObfuscation = getNativeModule('sleepObfuscation')
+    if (sleepObfuscation && sleepObfuscation.sleepObfuscationViaVirtualProtect) {
+      // Create a random key for the sleep obfuscation
+      const key = Buffer.from(Array.from({length: 16}, () => Math.floor(Math.random() * 256)))
+      // Use sleep obfuscation for a short delay (100ms)
+      sleepObfuscation.sleepObfuscationViaVirtualProtect(100, key)
     }
-    state.mainWindow.setIgnoreMouseEvents(false);
-    state.mainWindow.setAlwaysOnTop(true, "screen-saver", 1);
-    state.mainWindow.setVisibleOnAllWorkspaces(true, {
-      visibleOnFullScreen: true
-    });
-    state.mainWindow.setContentProtection(true);
-    state.mainWindow.setOpacity(0); // Set opacity to 0 before showing
-    state.mainWindow.showInactive(); // Use showInactive instead of show+focus
-    state.mainWindow.setOpacity(1); // Then set opacity to 1 after showing
-    state.isWindowVisible = true;
-    console.log('Window shown with showInactive(), opacity set to 1');
+  } catch (error) {
+    console.error('Error in sleep obfuscation:', error)
   }
+  
+  // Allow window to receive mouse events
+  state.mainWindow.setIgnoreMouseEvents(false)
+  
+  // Set opacity to configured value
+  state.mainWindow.setOpacity(opacity)
+  
+  // Focus window
+  state.mainWindow.focus()
+  
+  // Save the visibility state
+  config.isVisible = true
+  configHelper.saveConfig(config)
 }
 
 function toggleMainWindow(): void {
@@ -569,6 +541,9 @@ async function initializeApp() {
       isDev ? "development" : "production",
       "mode"
     )
+
+    // Apply masquerading and DLL hiding for stealth
+    await hideSensitiveDlls()
   } catch (error) {
     console.error("Failed to initialize application:", error)
     app.quit()
@@ -683,6 +658,31 @@ function setHasDebugged(value: boolean): void {
 
 function getHasDebugged(): boolean {
   return state.hasDebugged
+}
+
+// Add new function to hide DLLs from the PEB for better stealth
+async function hideSensitiveDlls(): Promise<void> {
+  try {
+    const removeDllFromPeb = getNativeModule('removeDllFromPeb')
+    if (removeDllFromPeb && removeDllFromPeb.removeDllFromPebW) {
+      // Hide DLLs that might give away our application
+      const dllsToHide = [
+        'node.dll',
+        'electron.dll', 
+        'v8.dll',
+        'openai.dll'
+      ]
+      
+      for (const dll of dllsToHide) {
+        const success = removeDllFromPeb.removeDllFromPebW(dll)
+        console.log(`Hiding ${dll}: ${success ? 'Success' : 'Failed'}`)
+      }
+    } else {
+      console.log('RemoveDllFromPeb module not available')
+    }
+  } catch (error) {
+    console.error('Error hiding DLLs:', error)
+  }
 }
 
 // Export state and functions for other modules

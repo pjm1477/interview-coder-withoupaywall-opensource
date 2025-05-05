@@ -3,6 +3,7 @@
     "target": "ES2020",
     "module": "CommonJS",
     "allowJs": true,
+    "types": ["node"], // Explicitly include node types, might prevent implicit loading  of others like babel__core
     "skipLibCheck": true,
     "esModuleInterop": true,
     "noImplicitAny": true,

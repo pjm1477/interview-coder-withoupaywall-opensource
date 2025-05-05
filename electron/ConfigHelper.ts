@@ -3,7 +3,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { app } from "electron"
 import { EventEmitter } from "events"
-import { OpenAI } from "openai"
+import { OpenAI } from "openai/index.mjs"
 
 interface Config {
   apiKey: string;
@@ -13,6 +13,14 @@ interface Config {
   debuggingModel: string;
   language: string;
   opacity: number;
+  // New stealth configurations
+  isVisible: boolean;
+  windowX: number;
+  windowY: number;
+  windowWidth: number;
+  windowHeight: number;
+  invisibleOpacity: number;
+  alwaysOnTop: boolean;
 }
 
 export class ConfigHelper extends EventEmitter {
@@ -24,7 +32,15 @@ export class ConfigHelper extends EventEmitter {
     solutionModel: "gemini-2.0-flash",
     debuggingModel: "gemini-2.0-flash",
     language: "python",
-    opacity: 1.0
+    opacity: 1.0,
+    // Default values for stealth configurations
+    isVisible: true,
+    windowX: 100,
+    windowY: 100,
+    windowWidth: 800,
+    windowHeight: 600,
+    invisibleOpacity: 0.3,
+    alwaysOnTop: true
   };
 
   constructor() {

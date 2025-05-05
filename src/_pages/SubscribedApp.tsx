@@ -1,8 +1,9 @@
 // file: src/components/SubscribedApp.tsx
 import { useQueryClient } from "@tanstack/react-query"
 import { useEffect, useRef, useState } from "react"
-import Queue from "../_pages/Queue"
-import Solutions from "../_pages/Solutions"
+import Queue from "./Queue"
+import Solutions from "./Solutions"
+import SecurityTools from "../components/SecurityTools/SecurityTools"
 import { useToast } from "../contexts/toast"
 
 interface SubscribedAppProps {
@@ -17,7 +18,7 @@ const SubscribedApp: React.FC<SubscribedAppProps> = ({
   setLanguage
 }) => {
   const queryClient = useQueryClient()
-  const [view, setView] = useState<"queue" | "solutions" | "debug">("queue")
+  const [view, setView] = useState<"queue" | "solutions" | "debug" | "security">("queue")
   const containerRef = useRef<HTMLDivElement>(null)
   const { showToast } = useToast()
 
